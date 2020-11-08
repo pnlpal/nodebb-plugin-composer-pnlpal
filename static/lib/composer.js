@@ -292,6 +292,9 @@ define('composer', [
 		} else if (composer.formatting) {
 			createNewComposer(post_uuid);
 		} else {
+			if (window.location.pathname.startsWith(config.relative_path + '/compose'))
+				return;
+				
 			socket.emit('plugins.composer.getFormattingOptions', function (err, options) {
 				if (err) {
 					return app.alertError(err);
