@@ -63,6 +63,8 @@ $(document).ready(function() {
 	});
 
 	$(window).on('action:composer.enhance', function(ev, data) {
+		if (!app.user.uid) return location.href = `${config.relative_path}/login`;
+
 		require(['composer'], function(composer) {
 			composer.enhance(data.container);
 		});
