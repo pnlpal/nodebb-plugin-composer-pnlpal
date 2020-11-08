@@ -24,7 +24,7 @@
 				<input class="handle form-control" type="text" tabindex="1" placeholder="[[topic:composer.handle_placeholder]]" value="{handle}" />
 			</div>
 			<!-- ENDIF showHandleInput -->
-			<div class="<!-- IF isTopic -->col-lg-9<!-- ELSE -->col-lg-12<!-- ENDIF isTopic --> col-md-12">
+			<div class="<!-- IF isTopicOrMain --> col-lg-6 col-md-6 col-xs-6 <!-- ELSE -->col-lg-12 col-md-12 col-xs-12<!-- ENDIF isTopicOrMain -->">
 				<!-- IF isTopicOrMain -->
 				<input name="title" form="compose-form" class="title form-control" type="text" tabindex="1" placeholder="[[topic:composer.title_placeholder]]" value="{topicTitle}"/>
 				<!-- ELSE -->
@@ -33,6 +33,10 @@
 				<div id="quick-search-container" class="quick-search-container hidden">
 					<div class="quick-search-results-container"></div>
 				</div>
+			</div>
+
+			<div class="<!-- IF isTopicOrMain -->col-lg-6 col-md-6 col-xs-6<!-- ELSE -->hide<!-- ENDIF isTopicOrMain -->">
+				<input name="externalLink" form="compose-form" class="external-link form-control" type="text" tabindex="2" placeholder="url here..." value="{externalLink}"/>
 			</div>
 		</div>
 

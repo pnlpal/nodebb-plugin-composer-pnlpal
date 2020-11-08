@@ -148,6 +148,7 @@ plugin.filterComposerBuild = async function (hookData) {
 			allowTopicsThumbnail: parseInt(meta.config.allowTopicsThumbnail, 10) === 1 && isMain,
 
 			topicTitle: topicData ? topicData.title.replace(/%/g, '&#37;').replace(/,/g, '&#44;') : '',
+			externalLink: topicData ? topicData.externalLink : undefined,
 			thumb: topicData ? topicData.thumb : '',
 			body: body,
 

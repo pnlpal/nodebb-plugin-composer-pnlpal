@@ -39,6 +39,7 @@ Sockets.push = async function (socket, pid) {
 		handle: parseInt(meta.config.allowGuestHandles, 10) ? postData.handle : undefined,
 		body: postData.content,
 		title: topic.title,
+		externalLink: topic.externalLink,
 		thumb: topic.thumb,
 		tags: tags,
 		isMain: isMain,

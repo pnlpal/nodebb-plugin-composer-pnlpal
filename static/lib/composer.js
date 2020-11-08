@@ -456,6 +456,7 @@ define('composer', [
 
 		var data = {
 			title: title,
+			externalLink: postData ? postData.externalLink : undefined,
 			mobile: composer.bsEnvironment === 'xs' || composer.bsEnvironment === 'sm',
 			resizable: true,
 			thumb: postData.thumb,
@@ -626,6 +627,7 @@ define('composer', [
 		var postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
 		var handleEl = postContainer.find('.handle');
 		var titleEl = postContainer.find('.title');
+		var externalLinkEl = postContainer.find('.external-link');
 		var bodyEl = postContainer.find('textarea');
 		var thumbEl = postContainer.find('input#topic-thumb-url');
 		var onComposeRoute = postData.hasOwnProperty('template') && postData.template.compose === true;
@@ -679,6 +681,7 @@ define('composer', [
 			composerData = {
 				handle: handleEl ? handleEl.val() : undefined,
 				title: titleEl.val(),
+				externalLink: externalLinkEl.val() || undefined,
 				content: bodyEl.val(),
 				thumb: thumbEl.val() || '',
 				cid: categoryList.getSelectedCid(),
@@ -700,6 +703,7 @@ define('composer', [
 				handle: handleEl ? handleEl.val() : undefined,
 				content: bodyEl.val(),
 				title: titleEl.val(),
+				externalLink: externalLinkEl.val() || undefined,
 				thumb: thumbEl.val() || '',
 				tags: tags.getTags(post_uuid),
 			};
