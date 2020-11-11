@@ -411,19 +411,21 @@ define('composer', [
 
 		drafts.init(postContainer, postData);
 		var draft = drafts.get(postData.save_id);
-		if (draft && draft.title) {
-			titleEl.val(draft.title);
+		if (!location.search.includes('title=') && !location.search.includes('link=')) {
+			if (draft && draft.title) {
+				titleEl.val(draft.title);
+			}
+			if (draft && draft.handle) {
+				handleEl.val(draft.handle);
+			}
+			if (draft && draft.tags) {
+				const tags = draft.tags.split(',');
+				tags.forEach(function (tag) {
+					tagsEl.tagsinput('add', tag);
+				});
+			}
+			bodyEl.val(draft.text ? draft.text : postData.body);
 		}
-		if (draft && draft.handle) {
-			handleEl.val(draft.handle);
-		}
-		if (draft && draft.tags) {
-			const tags = draft.tags.split(',');
-			tags.forEach(function (tag) {
-				tagsEl.tagsinput('add', tag);
-			});
-		}
-		bodyEl.val(draft.text ? draft.text : postData.body);
 
 		handleHelp(postContainer);
 		handleSearch(postContainer);

@@ -147,8 +147,8 @@ plugin.filterComposerBuild = async function (hookData) {
 			resizable: false,
 			allowTopicsThumbnail: parseInt(meta.config.allowTopicsThumbnail, 10) === 1 && isMain,
 
-			topicTitle: topicData ? topicData.title.replace(/%/g, '&#37;').replace(/,/g, '&#44;') : '',
-			externalLink: topicData ? topicData.externalLink : undefined,
+			topicTitle: topicData ? topicData.title.replace(/%/g, '&#37;').replace(/,/g, '&#44;') : req.query.title ? decodeURIComponent(req.query.title) : '',
+			externalLink: topicData ? topicData.externalLink : req.query.link ? decodeURIComponent(req.query.link) : undefined,
 			thumb: topicData ? topicData.thumb : '',
 			body: body,
 
@@ -167,7 +167,7 @@ plugin.filterComposerBuild = async function (hookData) {
 			formatting: formatting,
 			isAdminOrMod: isAdmin || isMod,
 			save_id: save_id,
-			privileges: globalPrivileges,
+			privileges: globalPrivileges
 		},
 	};
 };
