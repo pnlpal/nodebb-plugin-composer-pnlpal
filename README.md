@@ -1,6 +1,6 @@
-# Default Composer for NodeBB
+# Default composer for pnlpal community
 
-This plugin activates the default composer for NodeBB. It is activated by default, but can be swapped out as necessary.
+This plugin activates the default composer for pnlpal community, which is based on NodeBB's default composer.
 
 ## Screenshots
 

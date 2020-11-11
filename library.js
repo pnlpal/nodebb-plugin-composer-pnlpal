@@ -25,20 +25,20 @@ plugin.init = async function (data) {
 	const controllers = require('./controllers');
 	SocketPlugins.composer = socketMethods;
 
-	data.router.get('/admin/plugins/composer-default', data.middleware.admin.buildHeader, controllers.renderAdminPage);
-	data.router.get('/api/admin/plugins/composer-default', controllers.renderAdminPage);
+	data.router.get('/admin/plugins/composer-pnlpal', data.middleware.admin.buildHeader, controllers.renderAdminPage);
+	data.router.get('/api/admin/plugins/composer-pnlpal', controllers.renderAdminPage);
 };
 
 plugin.appendConfig = async function (config) {
-	config['composer-default'] = await meta.settings.get('composer-default');
+	config['composer-pnlpal'] = await meta.settings.get('composer-pnlpal');
 	return config;
 };
 
 plugin.addAdminNavigation = async function (header) {
 	header.plugins.push({
-		route: '/plugins/composer-default',
+		route: '/plugins/composer-pnlpal',
 		icon: 'fa-edit',
-		name: 'Composer (Default)',
+		name: 'Composer (pnlpal)',
 	});
 	return header;
 };

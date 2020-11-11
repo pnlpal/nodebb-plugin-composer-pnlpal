@@ -1,29 +1,30 @@
 {
-  "name": "nodebb-plugin-composer-default",
-  "version": "6.4.6",
-  "description": "Default composer for NodeBB",
+  "name": "nodebb-plugin-composer-pnlpal",
+  "version": "0.0.2",
+  "description": "Default composer for pnlpal community",
   "main": "library.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/NodeBB/nodebb-plugin-composer-default"
+    "url": "https://github.com/NodeBB/nodebb-plugin-composer-pnlpal"
   },
   "keywords": [
     "nodebb",
     "plugin",
     "composer",
-    "markdown"
+    "markdown",
+    "pnlpal"
   ],
   "author": {
-    "name": "NodeBB Team",
-    "email": "sales@nodebb.org"
+    "name": "River",
+    "email": "revir.qing@gmail.com"
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/NodeBB/nodebb-plugin-composer-default/issues"
+    "url": "https://github.com/pnlpal/nodebb-plugin-composer-pnlpal/issues"
   },
   "readmeFilename": "README.md",
   "nbbpm": {
-    "compatibility": "^1.14.3"
+    "compatibility": "^1.15.0"
   },
   "dependencies": {
     "screenfull": "^4.0.0",
