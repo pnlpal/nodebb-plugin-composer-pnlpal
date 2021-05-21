@@ -120,7 +120,10 @@ plugin.filterComposerBuild = async function (hookData) {
 	const isGuestPost = postData && parseInt(postData.uid, 10) === 0;
 	const save_id = generateSaveId(req);
 	const discardRoute = generateDiscardRoute(req, topicData);
-	const body = await generateBody(req, postData);
+	const [body, tags] = await Promise.all([
+		generateBody(req, postData),
+		topicData && topics.getTopicTags(topicData.tid)
+	]);
 
 	var action = 'topics.post';
 	let isMain = isMainPost;
@@ -159,6 +162,7 @@ plugin.filterComposerBuild = async function (hookData) {
 			tagWhitelist: tagWhitelist,
 			minTags: categoryData.minTags,
 			maxTags: categoryData.maxTags,
+			tags,
 
 			isTopic: !!req.query.cid,
 			isEditing: isEditing,
