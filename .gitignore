@@ -226,3 +226,5 @@ node_modules/
 
 *.sublime-project
 *.sublime-workspace
+
+nodebb-plugin-composer-pnlpal-backup/

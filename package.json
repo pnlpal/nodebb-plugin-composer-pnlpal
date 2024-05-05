@@ -7,6 +7,9 @@
     "type": "git",
     "url": "https://github.com/NodeBB/nodebb-plugin-composer-pnlpal"
   },
+  "scripts": {
+    "symlink-to-nodebb": "mv ../NodeBB/node_modules/nodebb-plugin-composer-pnlpal nodebb-plugin-composer-pnlpal-backup && ln -s $(pwd) ../NodeBB/node_modules/"
+  },
   "keywords": [
     "nodebb",
     "plugin",
