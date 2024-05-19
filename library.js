@@ -202,6 +202,13 @@ plugin.filterComposerBuild = async function (hookData) {
     topicData && topicData.title
       ? topicData.title.replace(/%/g, "&#37;").replace(/,/g, "&#44;")
       : validator.escape(String(req.query.title || ""));
+
+  const externalLink = topicData
+    ? topicData.externalLink
+    : req.query.link
+    ? validator.escape(String(req.query.link || ""))
+    : undefined;
+
   return {
     req: req,
     res: res,
@@ -221,6 +228,7 @@ plugin.filterComposerBuild = async function (hookData) {
       // can't use title property as that is used for page title
       topicTitle: topicTitle,
       titleLength: topicTitle ? topicTitle.length : 0,
+      externalLink: externalLink,
       topic: topicData,
       thumb: topicData ? topicData.thumb : "",
       body: body,

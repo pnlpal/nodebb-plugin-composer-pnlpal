@@ -383,6 +383,10 @@ define("composer", [
         postData.title = data.title;
         postData.modified = true;
       }
+      if (data.externalLink) {
+        postData.externalLink = data.externalLink;
+        postData.modified = true;
+      }
       push(postData);
     });
   };
