@@ -1,0 +1,14 @@
+.composer {
+  .title-container {
+    [data-component="composer/title"] {
+      > input {
+        display: inline-block;
+        width: 49%;
+
+        &:last-child {
+          float: right;
+        }
+      }
+    }
+  }
+}

@@ -13,7 +13,9 @@
 
 	<div data-component="composer/title" class="position-relative flex-1" style="min-width: 0;">
 		{{{ if isTopicOrMain }}}
-		<input class="title form-control h-100 rounded-1 shadow-none" type="text" placeholder="[[topic:composer.title-placeholder]]" value="{topicTitle}" />
+		<input class="title form-control h-100 rounded-1 shadow-none" type="text"
+			placeholder="[[topic:composer.title-placeholder]]" value="{topicTitle}" />
+		<input name="externalLink" class="external-link form-control h-100 rounded-1 shadow-none" type="text" placeholder="Enter url here..." value="{externalLink}" />
 		{{{ else }}}
 		<span class="{{{ if !template.compose }}}d-none d-md-block{{{ else }}}d-block{{{ end }}} title h-100 text-truncate">{{{ if isEditing }}}[[topic:composer.editing-in, "{topicTitle}"]]{{{ else }}}[[topic:composer.replying-to, "{topicTitle}"]]{{{ end }}}</span>
 		{{{ end }}}

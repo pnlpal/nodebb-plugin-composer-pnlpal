@@ -9,7 +9,7 @@
     { "hook": "filter:admin.header.build", "method": "addAdminNavigation" },
     { "hook": "filter:meta.getLinkTags", "method": "addPrefetchTags" }
   ],
-  "scss": ["./static/scss/composer.scss"],
+  "scss": ["./static/scss/composer.scss", "./static/scss/pnlpal.scss"],
   "scripts": [
     "./static/lib/client.js",
     "./node_modules/screenfull/dist/screenfull.js"
