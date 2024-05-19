@@ -1,17 +1,15 @@
 {
-  "name": "nodebb-plugin-composer-default",
+  "name": "nodebb-plugin-composer-pnlpal",
   "version": "10.2.36",
-  "description": "Default composer for NodeBB",
+  "description": "Default composer for pnlpal community",
   "main": "library.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/NodeBB/nodebb-plugin-composer-pnlpal"
+    "url": "https://github.com/pnlpal/nodebb-plugin-composer-pnlpal"
   },
   "scripts": {
-    "symlink-to-nodebb": "mv ../NodeBB/node_modules/nodebb-plugin-composer-pnlpal nodebb-plugin-composer-pnlpal-backup && ln -s $(pwd) ../NodeBB/node_modules/"
-  },
-  "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "symlink-to-nodebb": "rm -rf ../NodeBB/node_modules/nodebb-plugin-composer-pnlpal && ln -s $(pwd) ../NodeBB/node_modules/"
   },
   "keywords": [
     "nodebb",

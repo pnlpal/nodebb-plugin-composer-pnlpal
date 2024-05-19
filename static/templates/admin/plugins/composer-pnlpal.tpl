@@ -3,7 +3,7 @@
 
 	<div class="row m-0">
 		<div id="spy-container" class="col-12 col-md-8 px-0 mb-4" tabindex="0">
-			<form role="form" class="composer-default-settings mb-4">
+			<form role="form" class="composer-pnlpal-settings mb-4">
 				<div class="form-check form-switch">
 					<input id="composeRouteEnabled" class="form-check-input" type="checkbox" name="composeRouteEnabled" />
 					<label for="composeRouteEnabled" class="form-check-label">Use a separate route for the composer</label>
