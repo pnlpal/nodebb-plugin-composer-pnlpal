@@ -1,9 +1,8 @@
 'use strict';
 
-/* globals define */
-
-define('composer/autocomplete', ['composer/preview'], function(preview) {
-
+define('composer/autocomplete', [
+	'composer/preview', '@textcomplete/core', '@textcomplete/textarea', '@textcomplete/contenteditable',
+], function (preview, { Textcomplete }, { TextareaEditor }, { ContenteditableEditor }) {
 	var autocomplete = {
 		_active: {},
 	};
@@ -15,7 +14,7 @@ define('composer/autocomplete', ['composer/preview'], function(preview) {
 		}
 	});
 
-	autocomplete.init = function(postContainer, post_uuid) {
+	autocomplete.init = function (postContainer, post_uuid) {
 		var element = postContainer.find('.write');
 		var dropdownClass = 'composer-autocomplete-dropdown-' + post_uuid;
 		var timer;
@@ -26,7 +25,7 @@ define('composer/autocomplete', ['composer/preview'], function(preview) {
 			 * One reason is because they want to override the textarea with their own element.
 			 * In those scenarios, they don't specify the "write" class, and this conditional
 			 * looks for that and stops the autocomplete init process.
-			 **/
+			 */
 			return;
 		}
 
@@ -38,19 +37,21 @@ define('composer/autocomplete', ['composer/preview'], function(preview) {
 					'z-index': 20000,
 				},
 				className: dropdownClass + ' dropdown-menu textcomplete-dropdown',
-			}
+			},
 		};
 
 		element.on('keyup', function () {
 			clearTimeout(timer);
 			timer = setTimeout(function () {
 				var dropdown = document.querySelector('.' + dropdownClass);
-				var pos = dropdown.getBoundingClientRect();
+				if (dropdown) {
+					var pos = dropdown.getBoundingClientRect();
 
-				var margin = parseFloat(dropdown.style.marginTop, 10) || 0;
+					var margin = parseFloat(dropdown.style.marginTop, 10) || 0;
 
-				var offset = window.innerHeight + margin - 10 - pos.bottom;
-				dropdown.style.marginTop = Math.min(offset, 0) + 'px';
+					var offset = window.innerHeight + margin - 10 - pos.bottom;
+					dropdown.style.marginTop = Math.min(offset, 0) + 'px';
+				}
 			}, 0);
 		});
 
@@ -58,33 +59,32 @@ define('composer/autocomplete', ['composer/preview'], function(preview) {
 
 		autocomplete._active[post_uuid] = autocomplete.setup(data);
 
-		data.element.on('textComplete:select', function() {
+		data.element.on('textComplete:select', function () {
 			preview.render(postContainer);
 		});
 	};
 
 	// This is a generic method that is also used by the chat
-	autocomplete.setup = function (data) {
-		var element = data.element.get(0);
-		if (!element) {
+	autocomplete.setup = function ({ element, strategies, options }) {
+		const targetEl = element.get(0);
+		if (!targetEl) {
 			return;
 		}
 		var editor;
-		if (element.nodeName === 'TEXTAREA') {
-			var Textarea = window.Textcomplete.editors.Textarea;
-			editor = new Textarea(element);
-		} else if (element.nodeName === 'DIV' && element.getAttribute('contenteditable') === 'true') {
-			var ContentEditable = window.Textcomplete.editors.ContentEditable;
-			editor = new ContentEditable(element);
+		if (targetEl.nodeName === 'TEXTAREA' || targetEl.nodeName === 'INPUT') {
+			editor = new TextareaEditor(targetEl);
+		} else if (targetEl.nodeName === 'DIV' && targetEl.getAttribute('contenteditable') === 'true') {
+			editor = new ContenteditableEditor(targetEl);
 		}
-
+		if (!editor) {
+			throw new Error('unknown target element type');
+		}
 		// yuku-t/textcomplete inherits directionality from target element itself
-		element.setAttribute('dir', document.querySelector('html').getAttribute('data-dir'));
+		targetEl.setAttribute('dir', document.querySelector('html').getAttribute('data-dir'));
 
-		var textcomplete = new window.Textcomplete(editor, {
-			dropdown: data.options,
+		var textcomplete = new Textcomplete(editor, strategies, {
+			dropdown: options,
 		});
-		textcomplete.register(data.strategies);
 		textcomplete.on('rendered', function () {
 			if (textcomplete.dropdown.items.length) {
 				// Activate the first item by default.

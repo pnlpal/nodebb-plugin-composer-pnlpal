@@ -1,11 +1,8 @@
 'use strict';
 
-/* globals $, window, history, localStorage, document, define, socket, app, config, ajaxify, utils, bootbox, screenfull */
-
 define('composer', [
 	'taskbar',
 	'translator',
-	'composer/controls',
 	'composer/uploads',
 	'composer/formatting',
 	'composer/drafts',
@@ -14,9 +11,20 @@ define('composer', [
 	'composer/preview',
 	'composer/resize',
 	'composer/autocomplete',
+	'composer/scheduler',
+	'composer/post-queue',
 	'scrollStop',
+	'topicThumbs',
 	'api',
-], function (taskbar, translator, controls, uploads, formatting, drafts, tags, categoryList, preview, resize, autocomplete, scrollStop, api) {
+	'bootbox',
+	'alerts',
+	'hooks',
+	'messages',
+	'search',
+	'screenfull',
+], function (taskbar, translator, uploads, formatting, drafts, tags,
+	categoryList, preview, resize, autocomplete, scheduler, postQueue, scrollStop,
+	topicThumbs, api, bootbox, alerts, hooks, messagesModule, search, screenfull) {
 	var composer = {
 		active: undefined,
 		posts: {},
@@ -25,7 +33,6 @@ define('composer', [
 	};
 
 	$(window).off('resize', onWindowResize).on('resize', onWindowResize);
-	$(document).off('keyup', onKeyUp).on('keyup', onKeyUp);
 	onWindowResize();
 
 	$(window).on('action:composer.topics.post', function (ev, data) {
@@ -98,18 +105,9 @@ define('composer', [
 		composer.bsEnvironment = env;
 	}
 
-	function onKeyUp(event) {
-		if (composer.active) {
-			var keycode = (event.which ? event.which : event.keyCode);
-			if (keycode === 27) { // escape
-				composer.minimize(composer.active);
-			}
-		}
-	}
-
 	function alreadyOpen(post) {
 		// If a composer for the same cid/tid/pid is already open, return the uuid, else return bool false
-		var	type;
+		var type;
 		var id;
 
 		if (post.hasOwnProperty('cid')) {
@@ -134,6 +132,10 @@ define('composer', [
 	}
 
 	function push(post) {
+		if (!post) {
+			return;
+		}
+
 		var uuid = utils.generateUUID();
 		var existingUUID = alreadyOpen(post);
 
@@ -142,11 +144,11 @@ define('composer', [
 			return composer.load(existingUUID);
 		}
 
-		var actionText = '[[topic:composer.new_topic]]';
+		var actionText = '[[topic:composer.new-topic]]';
 		if (post.action === 'posts.reply') {
-			actionText = '[[topic:composer.replying_to]]';
+			actionText = '[[topic:composer.replying-to]]';
 		} else if (post.action === 'posts.edit') {
-			actionText = '[[topic:composer.editing]]';
+			actionText = '[[topic:composer.editing-in]]';
 		}
 
 		translator.translate(actionText, function (translatedAction) {
@@ -155,28 +157,24 @@ define('composer', [
 			});
 		});
 
-		// Construct a save_id
-		if (post.hasOwnProperty('cid')) {
-			post.save_id = ['composer', app.user.uid, 'cid', post.cid].join(':');
-		} else if (post.hasOwnProperty('tid')) {
-			post.save_id = ['composer', app.user.uid, 'tid', post.tid].join(':');
-		} else if (post.hasOwnProperty('pid')) {
-			post.save_id = ['composer', app.user.uid, 'pid', post.pid].join(':');
-		}
-
 		composer.posts[uuid] = post;
 		composer.load(uuid);
 	}
 
-	function composerAlert(post_uuid, message) {
+	async function composerAlert(post_uuid, message) {
 		$('.composer[data-uuid="' + post_uuid + '"]').find('.composer-submit').removeAttr('disabled');
-		app.alert({
-			type: 'danger',
-			timeout: 3000,
-			title: '',
-			message: message,
-			alert_id: 'post_error',
-		});
+
+		const { showAlert } = await hooks.fire('filter:composer.error', { post_uuid, message, showAlert: true });
+
+		if (showAlert) {
+			alerts.alert({
+				type: 'danger',
+				timeout: 10000,
+				title: '',
+				message: message,
+				alert_id: 'post_error',
+			});
+		}
 	}
 
 	composer.findByTid = function (tid) {
@@ -194,10 +192,12 @@ define('composer', [
 		formatting.addButton(iconClass, onClick, title);
 	};
 
-	composer.newTopic = function (data) {
-		var pushData = {
+	composer.newTopic = async (data) => {
+		let pushData = {
+			save_id: data.save_id,
 			action: 'topics.post',
 			cid: data.cid,
+			handle: data.handle,
 			title: data.title || '',
 			body: data.body || '',
 			tags: data.tags || [],
@@ -205,80 +205,102 @@ define('composer', [
 			isMain: true,
 		};
 
-		$(window).trigger('filter:composer.topic.push', {
+		({ pushData } = await hooks.fire('filter:composer.topic.push', {
 			data: data,
 			pushData: pushData,
-		});
+		}));
 
 		push(pushData);
 	};
 
-	composer.addQuote = function (tid, toPid, selectedPid, title, username, text, uuid) {
-		uuid = uuid || composer.active;
+	composer.addQuote = function (data) {
+		// tid, toPid, selectedPid, title, username, text, uuid
+		data.uuid = data.uuid || composer.active;
 
-		var escapedTitle = (title || '')
-			.replace(/([\\`*_{}\[\]()#+\-.!])/g, '\\$1')
+		var escapedTitle = (data.title || '')
+			.replace(/([\\`*_{}[\]()#+\-.!])/g, '\\$1')
 			.replace(/\[/g, '&#91;')
 			.replace(/\]/g, '&#93;')
 			.replace(/%/g, '&#37;')
 			.replace(/,/g, '&#44;');
 
-		if (text) {
-			text = '> ' + text.replace(/\n/g, '\n> ') + '\n\n';
+		if (data.body) {
+			data.body = '> ' + data.body.replace(/\n/g, '\n> ') + '\n\n';
 		}
-		var link = '[' + escapedTitle + '](' + config.relative_path + '/post/' + (selectedPid || toPid) + ')';
-		if (uuid === undefined) {
-			if (title && (selectedPid || toPid)) {
-				composer.newReply(tid, toPid, title, '[[modules:composer.user_said_in, ' + username + ', ' + link + ']]\n' + text);
+		var link = '[' + escapedTitle + '](' + config.relative_path + '/post/' + encodeURIComponent(data.selectedPid || data.toPid) + ')';
+		if (data.uuid === undefined) {
+			if (data.title && (data.selectedPid || data.toPid)) {
+				composer.newReply({
+					tid: data.tid,
+					toPid: data.toPid,
+					title: data.title,
+					body: '[[modules:composer.user-said-in, ' + data.username + ', ' + link + ']]\n' + data.body,
+				});
 			} else {
-				composer.newReply(tid, toPid, title, '[[modules:composer.user_said, ' + username + ']]\n' + text);
+				composer.newReply({
+					tid: data.tid,
+					toPid: data.toPid,
+					title: data.title,
+					body: '[[modules:composer.user-said, ' + data.username + ']]\n' + data.body,
+				});
 			}
 			return;
-		} else if (uuid !== composer.active) {
+		} else if (data.uuid !== composer.active) {
 			// If the composer is not currently active, activate it
-			composer.load(uuid);
+			composer.load(data.uuid);
 		}
 
-		var postContainer = $('.composer[data-uuid="' + uuid + '"]');
+		var postContainer = $('.composer[data-uuid="' + data.uuid + '"]');
 		var bodyEl = postContainer.find('textarea');
 		var prevText = bodyEl.val();
-		if (title && (selectedPid || toPid)) {
-			translator.translate('[[modules:composer.user_said_in, ' + username + ', ' + link + ']]\n', config.defaultLang, onTranslated);
+		if (data.title && (data.selectedPid || data.toPid)) {
+			translator.translate('[[modules:composer.user-said-in, ' + data.username + ', ' + link + ']]\n', config.defaultLang, onTranslated);
 		} else {
-			translator.translate('[[modules:composer.user_said, ' + username + ']]\n', config.defaultLang, onTranslated);
+			translator.translate('[[modules:composer.user-said, ' + data.username + ']]\n', config.defaultLang, onTranslated);
 		}
 
 		function onTranslated(translated) {
-			composer.posts[uuid].body = (prevText.length ? prevText + '\n\n' : '') + translated + text;
-			bodyEl.val(composer.posts[uuid].body);
+			composer.posts[data.uuid].body = (prevText.length ? prevText + '\n\n' : '') + translated + data.body;
+			bodyEl.val(composer.posts[data.uuid].body);
 			focusElements(postContainer);
 			preview.render(postContainer);
 		}
 	};
 
-	composer.newReply = function (tid, toPid, title, text) {
-		translator.translate(text, config.defaultLang, function (translated) {
+	composer.newReply = function (data) {
+		translator.translate(data.body, config.defaultLang, function (translated) {
 			push({
+				save_id: data.save_id,
 				action: 'posts.reply',
-				tid: tid,
-				toPid: toPid,
-				title: title,
+				tid: data.tid,
+				toPid: data.toPid,
+				title: data.title,
 				body: translated,
-				modified: !!((title && title.length) || (translated && translated.length)),
+				modified: !!(translated && translated.length),
 				isMain: false,
 			});
 		});
 	};
 
-	composer.editPost = function (pid) {
-		socket.emit('plugins.composer.push', pid, function (err, threadData) {
+	composer.editPost = function (data) {
+		// pid, text
+		socket.emit('plugins.composer.push', data.pid, function (err, postData) {
 			if (err) {
-				return app.alertError(err.message);
+				return alerts.error(err);
 			}
-			threadData.action = 'posts.edit';
-			threadData.pid = pid;
-			threadData.modified = false;
-			push(threadData);
+			postData.save_id = data.save_id;
+			postData.action = 'posts.edit';
+			postData.pid = data.pid;
+			postData.modified = false;
+			if (data.body) {
+				postData.body = data.body;
+				postData.modified = true;
+			}
+			if (data.title) {
+				postData.title = data.title;
+				postData.modified = true;
+			}
+			push(postData);
 		});
 	};
 
@@ -297,7 +319,7 @@ define('composer', [
 				
 			socket.emit('plugins.composer.getFormattingOptions', function (err, options) {
 				if (err) {
-					return app.alertError(err);
+					return alerts.error(err);
 				}
 				composer.formatting = options;
 				createNewComposer(post_uuid);
@@ -318,45 +340,22 @@ define('composer', [
 			postContainer.attr('data-uuid', post_uuid);
 		}
 
-		var titleEl = postContainer.find('input.title');
-		var handleEl = postContainer.find('input.handle');
-		var tagsEl = postContainer.find('input.tags');
-		var bodyEl = postContainer.find('textarea');
-		var submitBtn = postContainer.find('.composer-submit');
-
 		categoryList.init(postContainer, composer.posts[post_uuid]);
+		scheduler.init(postContainer, composer.posts);
 
 		formatting.addHandler(postContainer);
 		formatting.addComposerButtons();
 		preview.handleToggler(postContainer);
-
-		postContainer.find('.img-upload-btn').removeClass('hide');
-		postContainer.find('#files.lt-ie9').removeClass('hide');
-
-		if (app.user.privileges['upload:post:file']) {
-			postContainer.find('.file-upload-btn').removeClass('hide');
-			postContainer.find('#files.lt-ie9').removeClass('hide');
-		}
-
+		postQueue.showAlert(postContainer, postData);
 		uploads.initialize(post_uuid);
-
-		if (config.allowTopicsThumbnail && postData.isMain) {
-			uploads.toggleThumbEls(postContainer, composer.posts[post_uuid].thumb || '');
-		}
-
 		tags.init(postContainer, composer.posts[post_uuid]);
-
 		autocomplete.init(postContainer, post_uuid);
 
 		postContainer.on('change', 'input, textarea', function () {
 			composer.posts[post_uuid].modified = true;
-
-			// Post is modified, save to list of opened drafts
-			drafts.updateVisibility('available', composer.posts[post_uuid].save_id, true);
-			drafts.updateVisibility('open', composer.posts[post_uuid].save_id, true);
 		});
 
-		submitBtn.on('click', function (e) {
+		postContainer.on('click', '.composer-submit', function (e) {
 			e.preventDefault();
 			e.stopPropagation();	// Other click events bring composer back to active state which is undesired on submit
 
@@ -366,7 +365,7 @@ define('composer', [
 
 		require(['mousetrap'], function (mousetrap) {
 			mousetrap(postContainer.get(0)).bind('mod+enter', function () {
-				submitBtn.attr('disabled', true);
+				postContainer.find('.composer-submit').attr('disabled', true);
 				post(post_uuid);
 			});
 		});
@@ -378,6 +377,8 @@ define('composer', [
 				composer.discard(post_uuid);
 				return removeComposerHistory();
 			}
+
+			formatting.exitFullscreen();
 
 			var btn = $(this).prop('disabled', true);
 			translator.translate('[[modules:composer.discard]]', function (translated) {
@@ -397,60 +398,55 @@ define('composer', [
 			composer.minimize(post_uuid);
 		});
 
-		bodyEl.on('input propertychange', function () {
+		const textareaEl = postContainer.find('textarea');
+		textareaEl.on('input propertychange', utils.debounce(function () {
 			preview.render(postContainer);
-		});
+		}, 250));
 
-		bodyEl.on('scroll', function () {
+		textareaEl.on('scroll', function () {
 			preview.matchScroll(postContainer);
 		});
+
+		drafts.init(postContainer, postData);
+		const draft = drafts.get(postData.save_id);
 
 		preview.render(postContainer, function () {
 			preview.matchScroll(postContainer);
 		});
 
-		drafts.init(postContainer, postData);
-		var draft = drafts.get(postData.save_id);
-		if (!location.search.includes('title=') && !location.search.includes('link=')) {
-			if (draft && draft.title) {
-				titleEl.val(draft.title);
-			}
-			if (draft && draft.handle) {
-				handleEl.val(draft.handle);
-			}
-			if (draft && draft.tags) {
-				const tags = draft.tags.split(',');
-				tags.forEach(function (tag) {
-					tagsEl.tagsinput('add', tag);
-				});
-			}
-			bodyEl.val(draft.text ? draft.text : postData.body);
-		}
-
 		handleHelp(postContainer);
 		handleSearch(postContainer);
 		focusElements(postContainer);
-
-		// Hide "zen mode" if fullscreen API is not enabled/available (ahem, iOS...)
-		if (typeof screenfull !== 'undefined' && !screenfull.enabled) {
-			$('[data-format="zen"]').addClass('hidden');
+		if (postData.action === 'posts.edit') {
+			composer.updateThumbCount(post_uuid, postContainer);
 		}
 
-		$(window).trigger('action:composer.enhanced', {
-			postContainer: postContainer,
-			postData: postData,
-			draft: draft,
-		});
+		// Hide "zen mode" if fullscreen API is not enabled/available (ahem, iOS...)
+		if (!screenfull.isEnabled) {
+			$('[data-format="zen"]').parent().addClass('hidden');
+		}
+
+		hooks.fire('action:composer.enhanced', { postContainer, postData, draft });
 	};
 
-	function createNewComposer(post_uuid) {
+	async function getSelectedCategory(postData) {
+		if (ajaxify.data.template.category && parseInt(postData.cid, 10) === parseInt(ajaxify.data.cid, 10)) {
+			// no need to load data if we are already on the category page
+			return ajaxify.data;
+		} else if (parseInt(postData.cid, 10)) {
+			return await api.get(`/api/category/${postData.cid}`, {});
+		}
+		return null;
+	}
+
+	async function createNewComposer(post_uuid) {
 		var postData = composer.posts[post_uuid];
 
-		var allowTopicsThumbnail = config.allowTopicsThumbnail && postData.isMain;
 		var isTopic = postData ? postData.hasOwnProperty('cid') : false;
 		var isMain = postData ? !!postData.isMain : false;
 		var isEditing = postData ? !!postData.pid : false;
 		var isGuestPost = postData ? parseInt(postData.uid, 10) === 0 : false;
+		const isScheduled = postData.timestamp > Date.now();
 
 		// see
 		// https://github.com/NodeBB/NodeBB/issues/2994 and
@@ -458,24 +454,39 @@ define('composer', [
 		// remove when 1951 is resolved
 
 		var title = postData.title.replace(/%/g, '&#37;').replace(/,/g, '&#44;');
-
+		postData.category = await getSelectedCategory(postData);
+		const privileges = postData.category ? postData.category.privileges : ajaxify.data.privileges;
 		var data = {
-			title: title,
-			externalLink: postData ? postData.externalLink : undefined,
+			topicTitle: title,
+			titleLength: title.length,
+			body: translator.escape(utils.escapeHTML(postData.body)),
 			mobile: composer.bsEnvironment === 'xs' || composer.bsEnvironment === 'sm',
 			resizable: true,
 			thumb: postData.thumb,
-			allowTopicsThumbnail: allowTopicsThumbnail,
 			isTopicOrMain: isTopic || isMain,
+			maximumTitleLength: config.maximumTitleLength,
+			maximumPostLength: config.maximumPostLength,
 			minimumTagLength: config.minimumTagLength,
 			maximumTagLength: config.maximumTagLength,
+			'composer:showHelpTab': config['composer:showHelpTab'],
 			isTopic: isTopic,
 			isEditing: isEditing,
-			showHandleInput: config.allowGuestHandles && (app.user.uid === 0 || (isEditing && isGuestPost && app.user.isAdmin)),
+			canSchedule: !!(isMain && privileges &&
+				((privileges['topics:schedule'] && !isEditing) || (isScheduled && privileges.view_scheduled))),
+			showHandleInput: config.allowGuestHandles &&
+				(app.user.uid === 0 || (isEditing && isGuestPost && app.user.isAdmin)),
 			handle: postData ? postData.handle || '' : undefined,
 			formatting: composer.formatting,
-			tagWhitelist: ajaxify.data.tagWhitelist,
+			tagWhitelist: postData.category ? postData.category.tagWhitelist : ajaxify.data.tagWhitelist,
 			privileges: app.user.privileges,
+			selectedCategory: postData.category,
+			submitOptions: [
+				// Add items using `filter:composer.create`, or just add them to the <ul> in DOM
+				// {
+				// 	action: 'foobar',
+				// 	text: 'Text Label',
+				// }
+			],
 		};
 
 		if (data.mobile) {
@@ -486,10 +497,10 @@ define('composer', [
 
 		postData.mobile = composer.bsEnvironment === 'xs' || composer.bsEnvironment === 'sm';
 
-		$(window).trigger('filter:composer.create', {
+		({ postData, createData: data } = await hooks.fire('filter:composer.create', {
 			postData: postData,
 			createData: data,
-		});
+		}));
 
 		app.parseAndTranslate('composer', data, function (composerTemplate) {
 			if ($('.composer.composer[data-uuid="' + post_uuid + '"]').length) {
@@ -535,13 +546,10 @@ define('composer', [
 
 				submitBtns.removeAttr('tabindex');
 				mobileSubmitBtn.attr('tabindex', parseInt(idx, 10) + 1);
-
-				$('.category-name-container').on('click', function () {
-					$('.category-selector').toggleClass('open');
-				});
 			}
 
 			$(window).trigger('action:composer.loaded', {
+				postContainer: postContainer,
 				post_uuid: post_uuid,
 				composerData: composer.posts[post_uuid],
 				formatting: composer.formatting,
@@ -555,7 +563,7 @@ define('composer', [
 
 	function mobileHistoryAppend() {
 		var path = 'compose?p=' + window.location.pathname;
-		var returnPath = window.location.pathname.slice(1);
+		var returnPath = window.location.pathname.slice(1) + window.location.search;
 
 		// Remove relative path from returnPath
 		if (returnPath.startsWith(config.relative_path.slice(1))) {
@@ -571,16 +579,22 @@ define('composer', [
 		// Update address bar in case f5 is pressed
 		window.history.pushState({
 			url: path,
-		}, path, config.relative_path + '/' + path);
+		}, path, `${config.relative_path}/${returnPath}`);
 	}
 
 	function handleHelp(postContainer) {
-		var helpBtn = postContainer.find('.help');
-		socket.emit('plugins.composer.renderHelp', function (err, html) {
-			if (!err && html && html.length > 0) {
-				helpBtn.removeClass('hidden');
-				helpBtn.on('click', function () {
-					bootbox.alert(html);
+		const helpBtn = postContainer.find('[data-action="help"]');
+		helpBtn.on('click', async function () {
+			const html = await socket.emit('plugins.composer.renderHelp');
+			if (html && html.length > 0) {
+				bootbox.dialog({
+					size: 'large',
+					message: html,
+					onEscape: true,
+					backdrop: true,
+					onHidden: function () {
+						helpBtn.focus();
+					},
 				});
 			}
 		});
@@ -595,12 +609,16 @@ define('composer', [
 			return;
 		}
 
-		app.enableTopicSearch({
+		search.enableQuickSearch({
 			searchElements: {
 				inputEl: postContainer.find('input.title'),
 				resultEl: postContainer.find('.quick-search-container'),
 			},
+			searchOptions: {
+				composer: 1,
+			},
 			hideOnNoMatches: true,
+			hideDuringSearch: true,
 		});
 	}
 
@@ -610,8 +628,11 @@ define('composer', [
 		}
 
 		composer.active = post_uuid;
+		const postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
+		postContainer.css('visibility', 'visible');
 		$(window).trigger('action:composer.activate', {
 			post_uuid: post_uuid,
+			postContainer: postContainer,
 		});
 	}
 
@@ -627,7 +648,7 @@ define('composer', [
 		}, 20);
 	}
 
-	function post(post_uuid) {
+	async function post(post_uuid) {
 		var postData = composer.posts[post_uuid];
 		var postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
 		var handleEl = postContainer.find('.handle');
@@ -659,7 +680,13 @@ define('composer', [
 			bodyEl: bodyEl,
 			bodyLen: bodyEl.val().length,
 		};
+
+		await hooks.fire('filter:composer.check', payload);
 		$(window).trigger('action:composer.check', payload);
+
+		if (payload.error) {
+			return composerAlert(post_uuid, payload.error);
+		}
 
 		if (uploads.inProgress[post_uuid] && uploads.inProgress[post_uuid].length) {
 			return composerAlert(post_uuid, '[[error:still-uploading]]');
@@ -675,15 +702,20 @@ define('composer', [
 			return composerAlert(post_uuid, '[[error:content-too-long, ' + config.maximumPostLength + ']]');
 		} else if (checkTitle && !tags.isEnoughTags(post_uuid)) {
 			return composerAlert(post_uuid, '[[error:not-enough-tags, ' + tags.minTagCount() + ']]');
+		} else if (scheduler.isActive() && scheduler.getTimestamp() <= Date.now()) {
+			return composerAlert(post_uuid, '[[error:scheduling-to-past]]');
 		}
 
-		var composerData = {};
+		let composerData = {
+			uuid: post_uuid,
+		};
 		let method = 'post';
 		let route = '';
 
 		if (action === 'topics.post') {
 			route = '/topics';
 			composerData = {
+				...composerData,
 				handle: handleEl ? handleEl.val() : undefined,
 				title: titleEl.val(),
 				externalLink: externalLinkEl.val() || undefined,
@@ -691,10 +723,12 @@ define('composer', [
 				thumb: thumbEl.val() || '',
 				cid: categoryList.getSelectedCid(),
 				tags: tags.getTags(post_uuid),
+				timestamp: scheduler.getTimestamp(),
 			};
 		} else if (action === 'posts.reply') {
 			route = `/topics/${postData.tid}`;
 			composerData = {
+				...composerData,
 				tid: postData.tid,
 				handle: handleEl ? handleEl.val() : undefined,
 				content: bodyEl.val(),
@@ -704,6 +738,7 @@ define('composer', [
 			method = 'put';
 			route = `/posts/${postData.pid}`;
 			composerData = {
+				...composerData,
 				pid: postData.pid,
 				handle: handleEl ? handleEl.val() : undefined,
 				content: bodyEl.val(),
@@ -711,6 +746,7 @@ define('composer', [
 				externalLink: externalLinkEl.val() || undefined,
 				thumb: thumbEl.val() || '',
 				tags: tags.getTags(post_uuid),
+				timestamp: scheduler.getTimestamp(),
 			};
 		}
 		var submitHookData = {
@@ -720,7 +756,9 @@ define('composer', [
 			postData: postData,
 			redirect: true,
 		};
-		$(window).trigger('action:composer.submit', submitHookData);
+
+		await hooks.fire('filter:composer.submit', submitHookData);
+		hooks.fire('action:composer.submit', Object.freeze(submitHookData));
 
 		// Minimize composer (and set textarea as readonly) while submitting
 		var taskbarIconEl = $('#taskbar .composer[data-uuid="' + post_uuid + '"] i');
@@ -731,13 +769,22 @@ define('composer', [
 
 		api[method](route, composerData)
 			.then((data) => {
-				postContainer.find('.composer-submit').removeAttr('disabled');
+				submitBtn.removeAttr('disabled');
+				postData.submitted = true;
 
 				composer.discard(post_uuid);
 				drafts.removeDraft(postData.save_id);
 
 				if (data.queued) {
-					bootbox.alert(data.message);
+					alerts.alert({
+						type: 'success',
+						title: '[[global:alert.success]]',
+						message: data.message,
+						timeout: 10000,
+						clickfn: function () {
+							ajaxify.go(`/post-queue/${data.id}`);
+						},
+					});
 				} else if (action === 'topics.post') {
 					if (submitHookData.redirect) {
 						ajaxify.go('topic/' + data.slug, undefined, (onComposeRoute || composer.bsEnvironment === 'xs' || composer.bsEnvironment === 'sm'));
@@ -755,17 +802,16 @@ define('composer', [
 					removeComposerHistory();
 				}
 
-				$(window).trigger('action:composer.' + action, { composerData: composerData, data: data });
+				hooks.fire('action:composer.' + action, { composerData: composerData, data: data });
 			})
 			.catch((err) => {
 				// Restore composer on error
 				composer.load(post_uuid);
 				textareaEl.prop('readonly', false);
-				submitBtn.prop('disabled', false);
 				if (err.message === '[[error:email-not-confirmed]]') {
-					return app.showEmailConfirmWarning(err);
+					return messagesModule.showEmailConfirmWarning(err.message);
 				}
-				app.alertError(err);
+				composerAlert(post_uuid, err.message);
 			});
 	}
 
@@ -774,26 +820,31 @@ define('composer', [
 	}
 
 	function onHide() {
-		$('body').css({ paddingBottom: 0 });
+		$('#content').css({ paddingBottom: 0 });
 		$('html').removeClass('composing');
 		app.toggleNavbar(true);
+		formatting.exitFullscreen();
 	}
 
 	composer.discard = function (post_uuid) {
 		if (composer.posts[post_uuid]) {
+			var postData = composer.posts[post_uuid];
 			var postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
 			postContainer.remove();
-			drafts.removeDraft(composer.posts[post_uuid].save_id);
+			drafts.removeDraft(postData.save_id);
+			topicThumbs.deleteAll(post_uuid);
 
-			delete composer.posts[post_uuid];
-			composer.active = undefined;
 			taskbar.discard('composer', post_uuid);
 			$('[data-action="post"]').removeAttr('disabled');
 
-			$(window).trigger('action:composer.discard', {
+			hooks.fire('action:composer.discard', {
 				post_uuid: post_uuid,
+				postData: postData,
 			});
+			delete composer.posts[post_uuid];
+			composer.active = undefined;
 		}
+		scheduler.reset();
 		onHide();
 	};
 
@@ -810,6 +861,31 @@ define('composer', [
 		});
 
 		onHide();
+	};
+
+	composer.minimizeActive = function () {
+		if (composer.active) {
+			composer.miminize(composer.active);
+		}
+	};
+
+	composer.updateThumbCount = function (uuid, postContainer) {
+		const composerObj = composer.posts[uuid];
+		if (composerObj.action === 'topics.post' || (composerObj.action === 'posts.edit' && composerObj.isMain)) {
+			const calls = [
+				topicThumbs.get(uuid),
+			];
+			if (composerObj.pid) {
+				calls.push(topicThumbs.getByPid(composerObj.pid));
+			}
+			Promise.all(calls).then((thumbs) => {
+				const thumbCount = thumbs.flat().length;
+				const formatEl = postContainer.find('[data-format="thumbs"]');
+				formatEl.find('.badge')
+					.text(thumbCount)
+					.toggleClass('hidden', !thumbCount);
+			});
+		}
 	};
 
 	return composer;

@@ -1,40 +1,29 @@
 'use strict';
 
-/* globals define, socket*/
-
-define('composer/preview', function() {
+define('composer/preview', ['hooks'], function (hooks) {
 	var preview = {};
 
-	var timeoutId = 0;
-
-	preview.render = function(postContainer, callback) {
-		callback = callback || function() {};
+	preview.render = function (postContainer, callback) {
+		callback = callback || function () {};
 		if (!postContainer.find('.preview-container').is(':visible')) {
 			return callback();
 		}
 
-		if (timeoutId) {
-			clearTimeout(timeoutId);
-			timeoutId = 0;
-		}
 		var textarea = postContainer.find('textarea');
 
-		timeoutId = setTimeout(function() {
-			socket.emit('plugins.composer.renderPreview', textarea.val(), function(err, preview) {
-				timeoutId = 0;
-				if (err) {
-					return;
-				}
-				preview = $('<div>' + preview + '</div>');
-				preview.find('img:not(.not-responsive)').addClass('img-responsive');
-				postContainer.find('.preview').html(preview);
-				$(window).trigger('action:composer.preview');
-				callback();
-			});
-		}, 250);
+		socket.emit('plugins.composer.renderPreview', textarea.val(), function (err, preview) {
+			if (err) {
+				return;
+			}
+			preview = $('<div>' + preview + '</div>');
+			preview.find('img:not(.not-responsive)').addClass('img-fluid');
+			postContainer.find('.preview').html(preview);
+			hooks.fire('action:composer.preview', { postContainer, preview });
+			callback();
+		});
 	};
 
-	preview.matchScroll = function(postContainer) {
+	preview.matchScroll = function (postContainer) {
 		if (!postContainer.find('.preview-container').is(':visible')) {
 			return;
 		}
@@ -54,59 +43,62 @@ define('composer/preview', function() {
 		}
 	};
 
-	preview.handleToggler = function(postContainer) {
+	preview.handleToggler = function ($postContainer) {
+		const postContainer = $postContainer.get(0);
 		preview.env = utils.findBootstrapEnvironment();
+		const isMobile = ['xs', 'sm'].includes(preview.env);
+		const toggler = postContainer.querySelector('.formatting-bar [data-action="preview"]');
+		const showText = toggler.querySelector('.show-text');
+		const hideText = toggler.querySelector('.hide-text');
+		const previewToggled = localStorage.getItem('composer:previewToggled');
+		const hidePreviewOnOpen = config['composer-default'].hidePreviewOnOpen === 'on';
+		let show = !isMobile && (
+			((previewToggled === null && !hidePreviewOnOpen) || previewToggled === 'true')
+		);
+		const previewContainer = postContainer.querySelector('.preview-container');
+		const writeContainer = postContainer.querySelector('.write-container');
 
-		function hidePreview() {
-			togglePreview(false);
-			if (preview.env !== 'xs' && preview.env !=='sm') {
-				localStorage.setItem('composer:previewToggled', true);
-			}
-		}
-
-		function showPreview() {
-			togglePreview(true);
-			if (preview.env !== 'xs' && preview.env !=='sm') {
-				localStorage.removeItem('composer:previewToggled');
-			}
+		if (!toggler) {
+			return;
 		}
 
 		function togglePreview(show) {
-			if (preview.env === 'xs' || preview.env ==='sm') {
-				previewContainer.toggleClass('hide', false);
-				writeContainer.toggleClass('maximized', false);
-				showBtn.toggleClass('hide', true);
-				previewContainer.toggleClass('hidden-xs hidden-sm', !show);
-				writeContainer.toggleClass('hidden-xs hidden-sm', show);
+			if (isMobile) {
+				previewContainer.classList.toggle('hide', false);
+				writeContainer.classList.toggle('maximized', false);
 
-				// Render preview once on mobile
-				if (show) {
-					preview.render(postContainer, function () {});
-				}
+				previewContainer.classList.toggle('d-none', !show);
+				previewContainer.classList.toggle('d-flex', show);
+				previewContainer.classList.toggle('w-100', show);
+
+				writeContainer.classList.toggle('d-flex', !show);
+				writeContainer.classList.toggle('d-none', show);
+				writeContainer.classList.toggle('w-100', !show);
 			} else {
-				previewContainer.toggleClass('hide', !show);
-				writeContainer.toggleClass('maximized', !show);
-				showBtn.toggleClass('hide', show);
-				$('.write').focus();
+				previewContainer.classList.toggle('hide', !show);
+				writeContainer.classList.toggle('w-50', show);
+				writeContainer.classList.toggle('w-100', !show);
+				localStorage.setItem('composer:previewToggled', show);
 			}
-
-			preview.matchScroll(postContainer);
+			showText.classList.toggle('hide', show);
+			hideText.classList.toggle('hide', !show);
+			if (show) {
+				preview.render($postContainer);
+			}
+			preview.matchScroll($postContainer);
 		}
 		preview.toggle = togglePreview;
 
-		var showBtn = postContainer.find('.write-container .toggle-preview'),
-			hideBtn = postContainer.find('.preview-container .toggle-preview'),
-			previewContainer = $('.preview-container'),
-			writeContainer = $('.write-container');
+		toggler.addEventListener('click', (e) => {
+			if (e.button !== 0) {
+				return;
+			}
 
-		hideBtn.on('click', hidePreview);
-		showBtn.on('click', showPreview);
+			show = !show;
+			togglePreview(show);
+		});
 
-		if (localStorage.getItem('composer:previewToggled') || (preview.env === 'xs' || preview.env ==='sm')) {
-			hidePreview();
-		} else {
-			showPreview();
-		}
+		togglePreview(show);
 	};
 
 	return preview;

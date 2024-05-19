@@ -1,14 +1,10 @@
 'use strict';
 
-const _ = require.main.require('lodash');
-
 const meta = require.main.require('./src/meta');
 const privileges = require.main.require('./src/privileges');
 const posts = require.main.require('./src/posts');
 const topics = require.main.require('./src/topics');
 const plugins = require.main.require('./src/plugins');
-const categories = require.main.require('./src/categories');
-const user = require.main.require('./src/user');
 
 const Sockets = module.exports;
 
@@ -18,7 +14,7 @@ Sockets.push = async function (socket, pid) {
 		throw new Error('[[error:no-privileges]]');
 	}
 
-	const postData = await posts.getPostFields(pid, ['content', 'tid', 'uid', 'handle']);
+	const postData = await posts.getPostFields(pid, ['content', 'tid', 'uid', 'handle', 'timestamp']);
 	if (!postData && !postData.content) {
 		throw new Error('[[error:invalid-pid]]');
 	}
@@ -33,7 +29,7 @@ Sockets.push = async function (socket, pid) {
 		throw new Error('[[error:no-topic]]');
 	}
 
-	const result = await plugins.fireHook('filter:composer.push', {
+	const result = await plugins.hooks.fire('filter:composer.push', {
 		pid: pid,
 		uid: postData.uid,
 		handle: parseInt(meta.config.allowGuestHandles, 10) ? postData.handle : undefined,
@@ -43,6 +39,7 @@ Sockets.push = async function (socket, pid) {
 		thumb: topic.thumb,
 		tags: tags,
 		isMain: isMain,
+		timestamp: postData.timestamp,
 	});
 	return result;
 };
@@ -53,75 +50,46 @@ Sockets.editCheck = async function (socket, pid) {
 };
 
 Sockets.renderPreview = async function (socket, content) {
-	return await plugins.fireHook('filter:parse.raw', content);
+	return await plugins.hooks.fire('filter:parse.raw', content);
 };
 
 Sockets.renderHelp = async function () {
 	const helpText = meta.config['composer:customHelpText'] || '';
-
-	if (meta.config['composer:showHelpTab'] === '0') {
+	if (!meta.config['composer:showHelpTab']) {
 		throw new Error('help-hidden');
 	}
 
-	const parsed = await plugins.fireHook('filter:parse.raw', helpText);
-	if (!meta.config['composer:allowPluginHelp'] || meta.config['composer:allowPluginHelp'] === '1') {
-		return await plugins.fireHook('filter:composer.help', parsed);
+	const parsed = await plugins.hooks.fire('filter:parse.raw', helpText);
+	if (meta.config['composer:allowPluginHelp'] && plugins.hooks.hasListeners('filter:composer.help')) {
+		return await plugins.hooks.fire('filter:composer.help', parsed) || helpText;
 	}
 	return helpText;
 };
 
 Sockets.getFormattingOptions = async function () {
-	return await module.parent.exports.getFormattingOptions();
+	return await require('./library').getFormattingOptions();
 };
 
-Sockets.getCategoriesForSelect = async function (socket) {
-	const cids = await categories.getAllCidsFromSet('categories:cid');
-	let [allowed, categoriesData, isModerator, isAdmin] = await Promise.all([
-		privileges.categories.isUserAllowedTo('topics:create', cids, socket.uid),
-		categories.getCategoriesData(cids),
-		user.isModerator(socket.uid, cids),
-		user.isAdministrator(socket.uid),
-	]);
-
-	const filtered = await plugins.fireHook('filter:composer.getCategoriesForSelect', {
-		uid: socket.uid,
-		allowed: allowed,
-		categoriesData: categoriesData,
-		isModerator: isModerator,
-		isAdmin: isAdmin,
-	});
-	({ allowed, categoriesData, isModerator, isAdmin } = filtered);
-
-	categories.getTree(categoriesData);
-
-	const cidToAllowed = _.zipObject(cids, allowed.map((allowed, i) => isAdmin || isModerator[i] || allowed));
-	const cidToCategory = _.zipObject(cids, categoriesData);
-
-	const visibleCategories = categoriesData.filter(function (c) {
-		if (!c) {
-			return false;
-		}
-
-		const hasPostableChildren = checkPostableChildren(c, cidToAllowed);
-		const shouldBeRemoved = !hasPostableChildren && (!cidToAllowed[c.cid] || c.link || c.disabled);
-		const shouldBeDisaplayedAsDisabled = hasPostableChildren && (!cidToAllowed[c.cid] || c.link || c.disabled);
-		if (shouldBeDisaplayedAsDisabled) {
-			c.disabledClass = true;
-		}
-
-		if (shouldBeRemoved && c.parent && c.parent.cid && cidToCategory[c.parent.cid]) {
-			cidToCategory[c.parent.cid].children = cidToCategory[c.parent.cid].children.filter(child => child.cid !== c.cid);
-		}
-
-		return !shouldBeRemoved;
-	});
-
-	return categories.buildForSelectCategories(visibleCategories, ['disabledClass']);
-};
-
-function checkPostableChildren(category, cidToAllowed) {
-	if (!Array.isArray(category.children) || !category.children.length) {
+Sockets.shouldQueue = async function (socket, data) {
+	if (!data || !data.postData) {
+		throw new Error('[[error:invalid-data]]');
+	}
+	if (socket.uid <= 0) {
 		return false;
 	}
-	return category.children.some(c => c && !c.disabled && (cidToAllowed[c.cid] || checkPostableChildren(c, cidToAllowed)));
-}
+
+	let shouldQueue = false;
+	const { postData } = data;
+	if (postData.action === 'posts.reply') {
+		shouldQueue = await posts.shouldQueue(socket.uid, {
+			tid: postData.tid,
+			content: postData.content || '',
+		});
+	} else if (postData.action === 'topics.post') {
+		shouldQueue = await posts.shouldQueue(socket.uid, {
+			cid: postData.cid,
+			content: postData.content || '',
+		});
+	}
+	return shouldQueue;
+};

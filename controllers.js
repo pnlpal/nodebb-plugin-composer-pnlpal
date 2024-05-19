@@ -1,9 +1,11 @@
 'use strict';
 
-var Controllers = {};
+const Controllers = {};
 
-Controllers.renderAdminPage = function (req, res, next) {
-	res.render('admin/plugins/composer-pnlpal', {});
+Controllers.renderAdminPage = function (req, res) {
+	res.render('admin/plugins/composer-default', {
+		title: 'Composer (Default)',
+	});
 };
 
 module.exports = Controllers;

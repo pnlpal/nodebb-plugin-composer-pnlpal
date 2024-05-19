@@ -3,20 +3,6 @@ html.zen-mode {
 }
 
 .zen-mode .composer {
-	z-index: 10002;
-
-	position: absolute;
-	top: 0 !important;
-	right: 0;
-	left: 0;
-	bottom: 0;
-
-	overflow: hidden;
-
-	.mobile-navbar {
-		display: none !important;
-	}
-	
 	&.resizable {
 		padding-top: 0;
 	}
@@ -37,7 +23,7 @@ html.zen-mode {
 		border: none;
 		outline: none;
 	}
-	
+
 	.resizer {
 		display: none;
 	}
@@ -46,13 +32,9 @@ html.zen-mode {
 		.title-container {
 			display: none;
 		}
-
-		.category-tag-row {
-			margin-top: 3px;
-		}
 	}
 
-	@media (min-width: @screen-md-min) {
+	@include media-breakpoint-up(md) {
 		& {
 			padding-left: 15px;
 			padding-right: 15px;
