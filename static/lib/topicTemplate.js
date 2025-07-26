@@ -71,6 +71,7 @@ $(document).ready(function () {
         break;
       default:
         // Handle default case
+        $bodyEl.val("");
         break;
     }
   });

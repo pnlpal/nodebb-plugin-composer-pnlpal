@@ -1,6 +1,6 @@
 {
   "name": "nodebb-plugin-composer-pnlpal",
-  "version": "10.3.0",
+  "version": "10.3.1",
   "description": "Default composer for pnlpal community",
   "main": "library.js",
   "repository": {
