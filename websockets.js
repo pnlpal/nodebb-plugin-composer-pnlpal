@@ -36,8 +36,8 @@ Sockets.push = async function (socket, pid) {
     body: postData.sourceContent || postData.content || "",
     title: topic.title,
     externalLink: topic.externalLink,
-    thumb: topic.thumb,
-    tags: tags,
+    thumbs: topic.thumbs,
+    tags: topic.tags.map((t) => t.value),
     isMain: isMain,
     timestamp: postData.timestamp,
   });
