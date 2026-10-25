@@ -3,33 +3,35 @@
 define('composer/formatting', [
 	'composer/preview', 'composer/resize', 'topicThumbs', 'screenfull',
 ], function (preview, resize, topicThumbs, screenfull) {
-	var formatting = {};
+	const formatting = {};
 
-	var formattingDispatchTable = {
+	const formattingDispatchTable = {
 		picture: function () {
-			var postContainer = this;
+			const postContainer = this;
 			postContainer.find('#files')
 				.attr('accept', 'image/*')
+				.removeAttr('multiple')
 				.click();
 		},
 
 		upload: function () {
-			var postContainer = this;
+			const postContainer = this;
 			postContainer.find('#files')
 				.attr('accept', '')
+				.attr('multiple', 'multiple')
 				.click();
 		},
 
 		thumbs: function () {
 			formatting.exitFullscreen();
-			var postContainer = this;
+			const postContainer = this;
 			require(['composer'], function (composer) {
 				const uuid = postContainer.get(0).getAttribute('data-uuid');
 				const composerObj = composer.posts[uuid];
 
 				if (composerObj.action === 'topics.post' || (composerObj.action === 'posts.edit' && composerObj.isMain)) {
-					topicThumbs.modal.open({ id: uuid, pid: composerObj.pid }).then(() => {
-						postContainer.trigger('thumb.uploaded');	// toggle draft save
+					topicThumbs.modal.open({ id: uuid, postData: composerObj }).then(() => {
+						postContainer.trigger('thumb.uploaded');
 
 						// Update client-side with count
 						composer.updateThumbCount(uuid, postContainer);
@@ -39,12 +41,12 @@ define('composer/formatting', [
 		},
 
 		tags: function () {
-			var postContainer = this;
+			const postContainer = this;
 			postContainer.find('.tags-container').toggleClass('hidden');
 		},
 
 		zen: function () {
-			var postContainer = this;
+			const postContainer = this;
 			$(window).one('resize', function () {
 				function onResize() {
 					if (!screenfull.isFullscreen) {
@@ -70,7 +72,7 @@ define('composer/formatting', [
 		},
 	};
 
-	var buttons = [];
+	const buttons = [];
 
 	formatting.exitFullscreen = function () {
 		if (screenfull.isEnabled && screenfull.isFullscreen) {
@@ -82,7 +84,7 @@ define('composer/formatting', [
 		const formattingBarEl = $('.formatting-bar');
 		const fileForm = formattingBarEl.find('.formatting-group #fileForm');
 		buttons.forEach((btn) => {
-			let markup = ``;
+			let markup;
 			if (Array.isArray(btn.dropdownItems) && btn.dropdownItems.length) {
 				markup = generateFormattingDropdown(btn);
 			} else {
@@ -117,7 +119,7 @@ define('composer/formatting', [
 	function generateBadgetHtml(btn) {
 		let badgeHtml = '';
 		if (btn.badge) {
-			badgeHtml = `<span class="px-1 position-absolute top-0 start-100 translate-middle badge rounded text-bg-info"></span>`;
+			badgeHtml = `<span class="px-1 position-absolute top-0 start-100 translate-middle-x badge rounded text-bg-info"></span>`;
 		}
 		return badgeHtml;
 	}
@@ -178,8 +180,8 @@ define('composer/formatting', [
 
 	formatting.addHandler = function (postContainer) {
 		postContainer.on('click', '.formatting-bar [data-format]', function (event) {
-			var format = $(this).attr('data-format');
-			var textarea = $(this).parents('[component="composer"]').find('textarea')[0];
+			const format = $(this).attr('data-format');
+			const textarea = $(this).parents('[component="composer"]').find('textarea')[0];
 
 			if (formattingDispatchTable.hasOwnProperty(format)) {
 				formattingDispatchTable[format].call(

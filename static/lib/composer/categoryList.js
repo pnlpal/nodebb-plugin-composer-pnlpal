@@ -1,14 +1,15 @@
 'use strict';
 
 define('composer/categoryList', [
-	'categorySelector', 'taskbar', 'api',
-], function (categorySelector, taskbar, api) {
-	var categoryList = {};
+	'categorySelector', 'taskbar', 'api', 'alerts',
+], function (categorySelector, taskbar, api, alerts) {
+	const categoryList = {};
 
-	var selector;
+	let selector;
+	let mobileSelector;
 
 	categoryList.init = function (postContainer, postData) {
-		var listContainer = postContainer.find('.category-list-container');
+		const listContainer = postContainer.find('.category-list-container');
 		if (!listContainer.length) {
 			return;
 		}
@@ -25,37 +26,38 @@ define('composer/categoryList', [
 			onSelect: function (selectedCategory) {
 				if (postData.hasOwnProperty('cid')) {
 					changeCategory(postContainer, postData, selectedCategory);
+					mobileSelector.selectCategory(selectedCategory.cid, selectedCategory.categoryEl);
 				}
 			},
 		});
 		if (!selector) {
 			return;
 		}
+		// this is the mobile category selector
+		mobileSelector = categorySelector.init(
+			postContainer.find('.mobile-navbar [component="category-selector"]'), {
+				privilege: 'topics:create',
+				states: ['watching', 'tracking', 'notwatching', 'ignoring'],
+				onSelect: function (selectedCategory) {
+					if (postData.hasOwnProperty('cid')) {
+						changeCategory(postContainer, postData, selectedCategory);
+						selector.selectCategory(selectedCategory.cid, selectedCategory.categoryEl);
+					}
+				},
+			});
+
 		if (postData.cid && postData.category) {
 			selector.selectedCategory = { cid: postData.cid, name: postData.category.name };
+			if (mobileSelector) {
+				mobileSelector.selectedCategory = { cid: postData.cid, name: postData.category.name };
+			}
 		} else if (ajaxify.data.template.compose && ajaxify.data.selectedCategory) {
 			// separate composer route
 			selector.selectedCategory = { cid: ajaxify.data.cid, name: ajaxify.data.selectedCategory };
+			if (mobileSelector) {
+				mobileSelector.selectedCategory = { cid: ajaxify.data.cid, name: ajaxify.data.selectedCategory };
+			}
 		}
-
-		// this is the mobile category selector
-		postContainer.find('.category-name')
-			.translateHtml(selector.selectedCategory ? selector.selectedCategory.name : '[[modules:composer.select-category]]')
-			.on('click', function () {
-				categorySelector.modal({
-					privilege: 'topics:create',
-					states: ['watching', 'tracking', 'notwatching', 'ignoring'],
-					openOnLoad: true,
-					showLinks: false,
-					onSubmit: function (selectedCategory) {
-						postContainer.find('.category-name').text(selectedCategory.name);
-						selector.selectCategory(selectedCategory.cid);
-						if (postData.hasOwnProperty('cid')) {
-							changeCategory(postContainer, postData, selectedCategory);
-						}
-					},
-				});
-			});
 
 		toggleDropDirection(postContainer);
 	};
@@ -65,7 +67,7 @@ define('composer/categoryList', [
 	}
 
 	categoryList.getSelectedCid = function () {
-		var selectedCategory;
+		let selectedCategory;
 		if (selector) {
 			selectedCategory = selector.getSelectedCategory();
 		}
@@ -73,16 +75,16 @@ define('composer/categoryList', [
 	};
 
 	categoryList.updateTaskbar = function (postContainer, postData) {
-		if (parseInt(postData.cid, 10)) {
+		if (postData.cid) {
 			api.get(`/categories/${postData.cid}`, {}).then(function (category) {
 				updateTaskbarByCategory(postContainer, category);
-			});
+			}).catch(alerts.error);
 		}
 	};
 
 	function updateTaskbarByCategory(postContainer, category) {
 		if (category) {
-			var uuid = postContainer.attr('data-uuid');
+			const uuid = postContainer.attr('data-uuid');
 			taskbar.update('composer', uuid, {
 				image: category.backgroundImage,
 				color: category.color,
@@ -92,11 +94,23 @@ define('composer/categoryList', [
 		}
 	}
 
+	function updateTopicTemplate(postContainer, category, previousCategory) {
+		const currentText = postContainer.find('textarea.write').val();
+		const previousTopicTemplate = previousCategory && previousCategory.topicTemplate;
+		if (category && (!currentText.length || currentText === previousTopicTemplate) &&
+			currentText !== category.topicTemplate) {
+			postContainer.find('textarea.write').val(category.topicTemplate).trigger('input');
+		}
+	}
+
 	async function changeCategory(postContainer, postData, selectedCategory) {
+		const previousCategory = postData.category;
 		postData.cid = selectedCategory.cid;
-		const categoryData = await window.fetch(`${config.relative_path}/api/category/${selectedCategory.cid}`).then(r => r.json());
+		const categoryData = await window.fetch(`${config.relative_path}/api/category/${encodeURIComponent(selectedCategory.cid)}`).then(r => r.json());
 		postData.category = categoryData;
 		updateTaskbarByCategory(postContainer, categoryData);
+		updateTopicTemplate(postContainer, categoryData, previousCategory);
+
 		require(['composer/scheduler', 'composer/tags', 'composer/post-queue'], function (scheduler, tags, postQueue) {
 			scheduler.onChangeCategory(categoryData);
 			tags.onChangeCategory(postContainer, postData, selectedCategory.cid, categoryData);

@@ -8,28 +8,28 @@ define('composer/uploads', [
 	'uploadHelpers',
 	'jquery-form',
 ], function (preview, categoryList, translator, alerts, uploadHelpers) {
-	var uploads = {
+	const uploads = {
 		inProgress: {},
 	};
 
-	var uploadingText = '';
+	let uploadingText = '';
 
 	uploads.initialize = function (post_uuid) {
 		initializeDragAndDrop(post_uuid);
 		initializePaste(post_uuid);
 
 		addChangeHandlers(post_uuid);
-		addTopicThumbHandlers(post_uuid);
-		translator.translate('[[modules:composer.uploading, ' + 0 + '%]]', function (translated) {
+
+		translator.translateKey('modules:composer.uploading', [0]).then((translated) => {
 			uploadingText = translated;
 		});
 	};
 
 	function addChangeHandlers(post_uuid) {
-		var postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
+		const postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
 
 		postContainer.find('#files').on('change', function (e) {
-			var files = (e.target || {}).files ||
+			const files = (e.target || {}).files ||
 				($(this).val() ? [{ name: $(this).val(), type: utils.fileMimeType($(this).val()) }] : null);
 			if (files) {
 				uploadContentFiles({ files: files, post_uuid: post_uuid, route: '/api/post/upload' });
@@ -37,38 +37,8 @@ define('composer/uploads', [
 		});
 	}
 
-	function addTopicThumbHandlers(post_uuid) {
-		var postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
-
-		postContainer.on('click', '.topic-thumb-clear-btn', function (e) {
-			postContainer.find('input#topic-thumb-url').val('').trigger('change');
-			resetInputFile(postContainer.find('input#topic-thumb-file'));
-			$(this).addClass('hide');
-			e.preventDefault();
-		});
-
-		postContainer.on('paste change keypress', 'input#topic-thumb-url', function () {
-			var urlEl = $(this);
-			setTimeout(function () {
-				var url = urlEl.val();
-				if (url) {
-					postContainer.find('.topic-thumb-clear-btn').removeClass('hide');
-				} else {
-					resetInputFile(postContainer.find('input#topic-thumb-file'));
-					postContainer.find('.topic-thumb-clear-btn').addClass('hide');
-				}
-				postContainer.find('img.topic-thumb-preview').attr('src', url);
-			}, 100);
-		});
-	}
-
-	function resetInputFile($el) {
-		$el.wrap('<form />').closest('form').get(0).reset();
-		$el.unwrap();
-	}
-
 	function initializeDragAndDrop(post_uuid) {
-		var postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
+		const postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
 		uploadHelpers.handleDragDrop({
 			container: postContainer,
 			callback: function (upload) {
@@ -83,7 +53,7 @@ define('composer/uploads', [
 	}
 
 	function initializePaste(post_uuid) {
-		var postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
+		const postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
 		uploadHelpers.handlePaste({
 			container: postContainer,
 			callback: function (upload) {
@@ -107,35 +77,37 @@ define('composer/uploads', [
 	}
 
 	function uploadContentFiles(params) {
-		var files = [...params.files];
-		var post_uuid = params.post_uuid;
-		var postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
-		var textarea = postContainer.find('textarea');
-		var text = textarea.val();
-		var uploadForm = postContainer.find('#fileForm');
-		var doneUploading = false;
+		const files = [...params.files];
+		const post_uuid = params.post_uuid;
+		const postContainer = $('.composer[data-uuid="' + post_uuid + '"]');
+		const textarea = postContainer.find('textarea');
+		let text = textarea.val();
+		const uploadForm = postContainer.find('#fileForm');
+		let doneUploading = false;
 		uploadForm.attr('action', config.relative_path + params.route);
 
-		var cid = categoryList.getSelectedCid();
+		let cid = categoryList.getSelectedCid();
 		if (!cid && ajaxify.data.cid) {
 			cid = ajaxify.data.cid;
 		}
-		var i = 0;
-		var isImage = false;
-		for (i = 0; i < files.length; ++i) {
-			isImage = files[i].type.match(/image./);
+
+		for (let i = 0; i < files.length; ++i) {
+			const isImage = files[i].type.match(/image./);
 			if ((isImage && !app.user.privileges['upload:post:image']) || (!isImage && !app.user.privileges['upload:post:file'])) {
 				return alerts.error('[[error:no-privileges]]');
 			}
 		}
 
-		var filenameMapping = [];
+		const filenameMapping = [];
 		let filesText = '';
-		for (i = 0; i < files.length; ++i) {
+		for (let i = 0; i < files.length; ++i) {
 			// The filename map has datetime and iterator prepended so that they can be properly tracked even if the
 			// filenames are identical.
-			filenameMapping.push(i + '_' + Date.now() + '_' + (params.fileNames ? params.fileNames[i] : files[i].name));
-			isImage = files[i].type.match(/image./);
+			// params.fileNames are the names the files are uploaded under (pasted files get a uuid prefixed to
+			// avoid collisions), so they are only a fallback for blobs that carry no name of their own.
+			const displayName = files[i].name || (params.fileNames ? params.fileNames[i] : '');
+			filenameMapping.push(i + '_' + Date.now() + '_' + displayName);
+			const isImage = files[i].type.match(/image./);
 
 			if (!app.user.isAdmin && files[i].size > parseInt(config.maximumFileSize, 10) * 1024) {
 				uploadForm[0].reset();
@@ -166,13 +138,32 @@ define('composer/uploads', [
 
 		uploadForm.off('submit').submit(function () {
 			function updateTextArea(filename, text, trim) {
-				var newFilename;
+				let newFilename;
 				if (trim) {
 					newFilename = filename.replace(/^\d+_\d{13}_/, '');
 				}
-				var current = textarea.val();
-				var re = new RegExp(escapeRegExp(filename) + ']\\([^)]+\\)', 'g');
-				textarea.val(current.replace(re, (newFilename || filename) + '](' + text + ')'));
+				const el = textarea[0];
+				const re = new RegExp(escapeRegExp(filename) + ']\\([^)]+\\)', 'g');
+				const replacement = (newFilename || filename) + '](' + text + ')';
+				const scrollTop = el.scrollTop;
+
+				if (el.setRangeText) {
+					// Replace each placeholder in place instead of rewriting the whole value, so a caret
+					// or selection the user has in the textarea survives the progress updates.
+					// 'preserve' shifts the selection by the length delta of the replaced range.
+					const matches = [];
+					let match;
+					while ((match = re.exec(el.value)) !== null) {
+						matches.push(match);
+					}
+					// Walk backwards so earlier match indices stay valid as the value changes.
+					for (let i = matches.length - 1; i >= 0; i--) {
+						el.setRangeText(replacement, matches[i].index, matches[i].index + matches[i][0].length, 'preserve');
+					}
+				} else {
+					el.value = el.value.replace(re, replacement);
+				}
+				el.scrollTop = scrollTop;
 
 				$(window).trigger('action:composer.uploadUpdate', {
 					post_uuid: post_uuid,
@@ -201,18 +192,18 @@ define('composer/uploads', [
 					doneUploading = true;
 					postContainer.find('[data-action="post"]').prop('disabled', false);
 					const errorMsg = onUploadError(xhr, post_uuid);
-					for (var i = 0; i < files.length; ++i) {
+					for (let i = 0; i < files.length; ++i) {
 						updateTextArea(filenameMapping[i], errorMsg, true);
 					}
 					preview.render(postContainer);
 				},
 
 				uploadProgress: function (event, position, total, percent) {
-					translator.translate('[[modules:composer.uploading, ' + percent + '%]]', function (translated) {
+					translator.translateKey('modules:composer.uploading', [percent]).then(function (translated) {
 						if (doneUploading) {
 							return;
 						}
-						for (var i = 0; i < files.length; ++i) {
+						for (let i = 0; i < files.length; ++i) {
 							updateTextArea(filenameMapping[i], translated);
 						}
 					});
@@ -222,15 +213,22 @@ define('composer/uploads', [
 					const uploads = res.response.images;
 					doneUploading = true;
 					if (uploads && uploads.length) {
-						for (var i = 0; i < uploads.length; ++i) {
+						for (let i = 0; i < uploads.length; ++i) {
 							uploads[i].filename = filenameMapping[i].replace(/^\d+_\d{13}_/, '');
 							uploads[i].isImage = /image./.test(files[i].type);
 							updateTextArea(filenameMapping[i], uploads[i].url, true);
 						}
 					}
 					preview.render(postContainer);
-					textarea.prop('selectionEnd', cursorPosition + textarea.val().length - textLen);
-					textarea.focus();
+					// If the user moved into the textarea while uploading, updateTextArea already kept
+					// their caret in the right place, so leave it alone. Otherwise place it after the
+					// inserted markdown. Both endpoints have to be set, or the new selectionEnd and the
+					// stale selectionStart span the inserted text as a selection.
+					if (document.activeElement !== textarea[0]) {
+						const pos = cursorPosition + textarea.val().length - textLen;
+						textarea[0].setSelectionRange(pos, pos);
+						textarea.focus();
+					}
 					postContainer.find('[data-action="post"]').prop('disabled', false);
 					$(window).trigger('action:composer.upload', {
 						post_uuid: post_uuid,
@@ -251,12 +249,12 @@ define('composer/uploads', [
 	}
 
 	function onUploadError(xhr, post_uuid) {
-		var msg = (xhr.responseJSON &&
+		let msg = (xhr.responseJSON &&
 			(xhr.responseJSON.error || (xhr.responseJSON.status && xhr.responseJSON.status.message))) ||
 			'[[error:parse-error]]';
 
 		if (xhr && xhr.status === 413) {
-			msg = xhr.statusText || 'Request Entity Too Large';
+			msg = '[[error:api.413]]';
 		}
 		alerts.error(msg);
 		$(window).trigger('action:composer.uploadError', {

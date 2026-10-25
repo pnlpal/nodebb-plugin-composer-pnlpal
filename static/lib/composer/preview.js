@@ -1,7 +1,7 @@
 "use strict";
 
 define("composer/preview", ["hooks"], function (hooks) {
-  var preview = {};
+  const preview = {};
 
   preview.render = function (postContainer, callback) {
     callback = callback || function () {};
@@ -9,7 +9,7 @@ define("composer/preview", ["hooks"], function (hooks) {
       return callback();
     }
 
-    var textarea = postContainer.find("textarea");
+    const textarea = postContainer.find("textarea");
 
     socket.emit(
       "plugins.composer.renderPreview",
@@ -23,7 +23,7 @@ define("composer/preview", ["hooks"], function (hooks) {
         postContainer.find(".preview").html(preview);
         hooks.fire("action:composer.preview", { postContainer, preview });
         callback();
-      }
+      },
     );
   };
 
@@ -31,20 +31,20 @@ define("composer/preview", ["hooks"], function (hooks) {
     if (!postContainer.find(".preview-container").is(":visible")) {
       return;
     }
-    var textarea = postContainer.find("textarea");
-    var preview = postContainer.find(".preview");
+    const textarea = postContainer.find("textarea");
+    const preview = postContainer.find(".preview");
 
     if (textarea.length && preview.length) {
-      var diff = textarea[0].scrollHeight - textarea.height();
+      const diff = textarea[0].scrollHeight - textarea.height();
 
       if (diff === 0) {
         return;
       }
 
-      var scrollPercent = textarea.scrollTop() / diff;
+      const scrollPercent = textarea.scrollTop() / diff;
 
       preview.scrollTop(
-        Math.max(preview[0].scrollHeight - preview.height(), 0) * scrollPercent
+        Math.max(preview[0].scrollHeight - preview.height(), 0) * scrollPercent,
       );
     }
   };
@@ -54,12 +54,13 @@ define("composer/preview", ["hooks"], function (hooks) {
     preview.env = utils.findBootstrapEnvironment();
     const isMobile = ["xs", "sm"].includes(preview.env);
     const toggler = postContainer.querySelector(
-      '.formatting-bar [data-action="preview"]'
+      '.formatting-bar [data-action="preview"]',
     );
     const showText = toggler.querySelector(".show-text");
     const hideText = toggler.querySelector(".hide-text");
     const previewToggled = localStorage.getItem("composer:previewToggled");
     const hidePreviewOnOpen =
+      config["composer-pnlpal"] &&
       config["composer-pnlpal"].hidePreviewOnOpen === "on";
     let show =
       !isMobile &&
@@ -73,6 +74,7 @@ define("composer/preview", ["hooks"], function (hooks) {
     }
 
     function togglePreview(show) {
+      const isMobile = ["xs", "sm"].includes(preview.env);
       if (isMobile) {
         previewContainer.classList.toggle("hide", false);
         writeContainer.classList.toggle("maximized", false);
